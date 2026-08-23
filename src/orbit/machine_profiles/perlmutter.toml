@@ -1,0 +1,26 @@
+# Perlmutter scheduler defaults.
+[slurm]
+constraint = "cpu"
+qos = "regular"
+nodes = 1
+tasks_per_node = 64
+cpus_per_task = 2
+time = "02:00:00"
+max_concurrent = 8
+launcher = "srun"
+launcher_args = ["--cpu-bind=cores"]
+cpu_bind = "cores"
+module_purge = false
+modules = [
+    "espresso/7.5-libxc-7.0.0-cpu",
+]
+
+[environment]
+OMP_NUM_THREADS = "1"
+OMP_PROC_BIND = "spread"
+OMP_PLACES = "threads"
+
+[executables]
+pw = "pw.x"
+ph = "ph.x"
+pp = "pp.x"

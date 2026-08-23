@@ -1,0 +1,29 @@
+# Whoville3 scheduler defaults.
+[slurm]
+partition = "shared"
+nodes = 1
+tasks_per_node = 48
+cpus_per_task = 1
+time = "02:00:00"
+max_concurrent = 6
+launcher = "mpirun"
+launcher_args = []
+cpu_bind = ""
+module_purge = true
+modules = [
+    "intel/2023.2.1",
+    "impi/2021.10.0",
+    "mkl/2023.2.0",
+    "espresso/7.1.0-intel-mkl",
+]
+setup_commands = []
+
+[environment]
+OMP_NUM_THREADS = "1"
+OMP_PROC_BIND = "spread"
+OMP_PLACES = "threads"
+
+[executables]
+pw = "pw.x"
+ph = "ph.x"
+pp = "pp.x"

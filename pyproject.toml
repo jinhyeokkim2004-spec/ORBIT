@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "orbit"
+version = "0.15.0"
+description = "ORBIT: Reproducible insulating-path sampling and Quantum ESPRESSO workflow"
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [{name = "ORBIT contributors"}]
+dependencies = [
+    "ase>=3.22",
+    "numpy>=1.24",
+    "plotly>=5.0",
+    "spglib>=2.0",
+]
+
+[project.scripts]
+orbit = "orbit.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
