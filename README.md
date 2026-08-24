@@ -117,6 +117,7 @@ O = "O.paw.pbe.upf"
 ```
 
 **Reference pseudopotential set used for testing**
+
 ORBIT development and many benchmark calculations were tested using the
 SSSP PBE pseudopotential set from the Standard Solid-State
 Pseudopotentials (SSSP) library.
