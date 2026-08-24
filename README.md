@@ -1,6 +1,6 @@
 # ORBIT
 
-ORBIT is a reproducible workflow for sampling one-atom displacements in a
+ORBIT (Oxidation-state Retrieval Band-gap Insulating path Tracer) is a reproducible workflow for sampling one-atom displacements in a
 periodic crystal, running Quantum ESPRESSO (QE) SCF calculations, extracting
 HOMO-LUMO gaps, finding a maximum-bottleneck winding path, calculating every
 path image, and viewing the result in an interactive HTML plot.
