@@ -10,18 +10,317 @@ This README is the user guide. Users wishing to customize scripts for their pers
 
 ## What the workflow does
 
-For each selected crystallographic site, ORBIT:
+For each selected crystallographic site, ORBIT proceeds through the following stages.
 
-1. inspects the input structure and assigns stable site IDs;
-2. builds a full-cell displacement grid;
-3. reduces that grid by the target-site stabilizer symmetry;
-4. rejects exact nuclear overlaps while preserving them as impassable walls;
-5. prepares and submits QE SCF calculations;
-6. accepts a gap only from an output containing both a HOMO/LUMO pair and
-   `JOB DONE`;
-7. finds the periodic path whose minimum sampled gap is as large as possible;
-8. prepares and submits SCFs for the interpolated path images; and
-9. generates a standalone interactive heatmap/path viewer.
+### 1. Initialize and inspect the structure
+
+Initialize an ORBIT project from a CIF structure:
+
+```bash
+orbit init
+```
+
+Inspect the structure, crystallographic symmetry, stable site IDs, and
+symmetry-inequivalent sites:
+
+```bash
+orbit inspect
+```
+
+List the currently selected displacement targets:
+
+```bash
+orbit targets list
+```
+
+Select the site or sites to study:
+
+```bash
+orbit targets set Ti1
+```
+
+For multiple targets:
+
+```bash
+orbit targets set Ti1 Sr1
+```
+
+### 2. Build the displacement sampling grid
+
+For a selected target, ORBIT builds the full-cell displacement grid, folds it
+by the stabilizer symmetry of that target site, and applies the configured
+geometry exclusions.
+
+```bash
+orbit sample --target Ti1
+```
+
+The relevant sampling controls are specified in `orbit.toml`, for example:
+
+```toml
+[sampling]
+spacing_angstrom = 0.3
+fold_by_symmetry = true
+symprec_angstrom = 0.001
+overlap_tolerance_angstrom = 1.0e-5
+minimum_interatomic_distance_angstrom = 0.5
+```
+
+Rejected geometries remain unavailable to the pathfinding graph rather than
+being interpolated or assigned artificial gap values.
+
+### 3. Prepare and run sampled-point SCF calculations
+
+Prepare Quantum ESPRESSO SCF inputs for the valid sampled configurations:
+
+```bash
+orbit scf --target Ti1
+```
+
+To also submit the generated Slurm array:
+
+```bash
+orbit scf --target Ti1 --submit
+```
+
+ORBIT never submits calculations unless `--submit` is explicitly supplied.
+
+### 4. Extract sampled band gaps
+
+After the sampled SCFs finish, extract the electronic results:
+
+```bash
+orbit extract --target Ti1
+```
+
+Only successfully completed and electronically usable SCF calculations are
+accepted as live gap nodes. Missing, failed, geometrically rejected, or
+non-converged calculations remain unavailable to the pathfinding graph.
+
+### 5. Construct the periodic insulating path
+
+Use the sampled gap field to search for the periodic target-atom trajectory
+whose bottleneck gap is maximized:
+
+```bash
+orbit path --target Ti1
+```
+
+ORBIT searches the periodic sampling graph and records the selected
+destination, raw graph path, bottleneck gap, and interpolated path images.
+
+The generated path receives a unique run ID, for example:
+
+```text
+20260822T183544Z-4603a350
+```
+
+This run ID can be supplied explicitly to later commands when needed.
+
+### 6. Prepare and run SCFs along the selected path
+
+Prepare SCF calculations for all interpolated path images:
+
+```bash
+orbit path-scf --target Ti1
+```
+
+Submit them with:
+
+```bash
+orbit path-scf --target Ti1 --submit
+```
+
+If a specific path run should be used:
+
+```bash
+orbit path-scf \
+    --target Ti1 \
+    --run-id 20260822T183544Z-4603a350 \
+    --submit
+```
+
+### 7. Extract the calculated path gaps
+
+After all path-image SCFs finish:
+
+```bash
+orbit path-extract --target Ti1
+```
+
+Or, for a specific run:
+
+```bash
+orbit path-extract \
+    --target Ti1 \
+    --run-id 20260822T183544Z-4603a350
+```
+
+This produces the calculated band gap as a function of path image and records
+the minimum gap along the trajectory.
+
+### 8. Plot and inspect the path
+
+Generate the interactive path/gap visualization:
+
+```bash
+orbit plot --target Ti1
+```
+
+Or, for a specific run:
+
+```bash
+orbit plot \
+    --target Ti1 \
+    --run-id 20260822T183544Z-4603a350
+```
+
+The viewer allows the atomic configuration and calculated band gap to be
+inspected along the displacement trajectory.
+
+### 9. Refine a path with helper-atom motion when necessary
+
+If the target-only path does not meet the desired insulating threshold, ORBIT
+can search nearby atoms for helper displacements that increase the gap at the
+current bottleneck.
+
+Inspect the helper campaign state:
+
+```bash
+orbit helper status --target Ti1
+```
+
+Prepare a helper scan:
+
+```bash
+orbit helper scan --target Ti1 --check-only
+```
+
+Prepare and submit the helper scan:
+
+```bash
+orbit helper scan --target Ti1 --submit
+```
+
+After the helper scan calculations finish, select the best electronically
+improving, geometry-safe helper configuration and construct the refined path:
+
+```bash
+orbit helper analyze --target Ti1
+```
+
+Submit SCFs along the refined helper path:
+
+```bash
+orbit helper path-scf --target Ti1 --submit
+```
+
+Extract the resulting helper-path gaps:
+
+```bash
+orbit helper extract --target Ti1
+```
+
+Plot the helper iterations:
+
+```bash
+orbit helper plot --target Ti1
+```
+
+If the resulting minimum gap is still below the configured helper target,
+repeat the helper cycle:
+
+```text
+helper scan
+    ↓
+helper analyze
+    ↓
+helper path-scf
+    ↓
+helper extract
+    ↓
+helper plot
+    ↓
+next helper scan
+```
+
+The target insulating threshold and helper search parameters are configured in
+`orbit.toml`, for example:
+
+```toml
+[helper]
+target_gap_eV = 0.15
+neighbor_cutoff_angstrom = 2.00
+scan_axes = "xyz"
+scan_radius_angstrom = 0.50
+scan_steps_per_axis = 5
+minimum_helper_distance_angstrom = 0.5
+taper_half_width_images = 8.0
+improvement_tolerance_eV = 1.0e-6
+```
+
+### 10. Calculate polarization along the final insulating path
+
+Once the final path is accepted, prepare the Berry-phase polarization
+calculations:
+
+```bash
+orbit path-polarization --target Ti1
+```
+
+Submit them with:
+
+```bash
+orbit path-polarization --target Ti1 --submit
+```
+
+When a helper-refined path is the final trajectory, ORBIT uses that helper
+iteration as the polarization source.
+
+### Typical command sequence
+
+For a target `Ti1`, a complete target-only workflow is:
+
+```bash
+orbit inspect
+orbit targets set Ti1
+
+orbit sample --target Ti1
+
+orbit scf --target Ti1
+orbit scf --target Ti1 --submit
+
+orbit extract --target Ti1
+
+orbit path --target Ti1
+
+orbit path-scf --target Ti1
+orbit path-scf --target Ti1 --submit
+
+orbit path-extract --target Ti1
+orbit plot --target Ti1
+```
+
+If helper refinement is required:
+
+```bash
+orbit helper scan --target Ti1 --check-only
+orbit helper scan --target Ti1 --submit
+
+# Wait for the helper scan SCFs to finish.
+
+orbit helper analyze --target Ti1
+orbit helper path-scf --target Ti1 --submit
+
+# Wait for the helper-path SCFs to finish.
+
+orbit helper extract --target Ti1
+orbit helper plot --target Ti1
+orbit helper status --target Ti1
+```
+
+Repeat the helper cycle until the configured target gap is reached, then run
+the final polarization calculation.
 
 ORBIT never submits a job unless `--submit` is explicitly supplied.
 
