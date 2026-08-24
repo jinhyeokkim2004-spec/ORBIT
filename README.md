@@ -502,7 +502,7 @@ remains visible.
 After editing `orbit.toml`, the full workflow for `O1` is:
 
 ```bash
-cd /global/workdir/jkim068/H2O
+cd /path/to/project
 
 orbit inspect
 orbit targets set --sites O1
@@ -565,6 +565,8 @@ each form does.
 orbit --help
 orbit --version
 orbit COMMAND --help
+orbit machine show --help
+orbit doctor --help
 orbit targets --help
 orbit targets list --help
 orbit targets set --help
@@ -575,6 +577,8 @@ orbit targets set --help
 | `orbit --help` | Lists all top-level ORBIT commands. |
 | `orbit --version` | Prints the installed package version. |
 | `orbit COMMAND --help` | Lists the options for one top-level command. |
+| `orbit machine show` | Prints the effective machine profile and resolved Slurm settings. |
+| `orbit doctor` | Alias-style diagnostic view of the same effective scheduler configuration. |
 | `orbit targets ... --help` | Shows help for the nested target-selection commands. |
 
 These commands read no project data, write nothing, and submit nothing.
@@ -597,8 +601,8 @@ orbit init --structure STRUCTURE_PATH [--root PROJECT_DIRECTORY] [--force-config
 Examples:
 
 ```bash
-orbit init --root /global/workdir/jkim068/H2O --structure H2O.cif
-orbit init --root . --structure H2O.cif
+orbit init --root /path/to/project --structure crystal.cif
+orbit init --root . --structure crystal.cif
 ```
 
 Inputs: the structure path supplied on the command line.
@@ -612,6 +616,40 @@ Next task: edit `orbit.toml`, then run `orbit inspect`.
 
 Purpose: read the configured structure, detect symmetry, assign stable site
 IDs, and bind downstream work to the current CIF bytes.
+
+### Task: inspect the effective machine profile — `orbit machine show` and `orbit doctor`
+
+Purpose: print the resolved scheduler profile, merged project overrides, and the
+computed Slurm fields without writing files. This is the quickest way to verify
+that a project will use the intended machine defaults before any job is
+submitted.
+
+```text
+orbit machine show [--root PROJECT_DIRECTORY]
+orbit doctor [--root PROJECT_DIRECTORY]
+```
+
+| Option | Required? | Explanation |
+| --- | --- | --- |
+| `--root PROJECT_DIRECTORY` | No | Project directory containing `orbit.toml`. Default: current directory. |
+
+Examples:
+
+```bash
+orbit machine show
+orbit doctor
+orbit machine show --root /path/to/project
+```
+
+Inputs: the project config and the selected machine profile.
+
+Outputs: a console summary of the resolved profile name, account, partition,
+constraint, QoS, nodes/tasks/cpus, launcher, CPU bind, module setup, QE
+command names, and concurrency limits.
+
+Use this after `orbit init --machine perlmutter` or when debugging an existing
+project that should be targeting a specific cluster.
+
 
 ```text
 orbit inspect [--root PROJECT_DIRECTORY]
@@ -1025,11 +1063,17 @@ the slider, play/pause, show/hide sampled points, and switch LIGHT/DARK themes.
 | `orbit extract` | Extract auditable sampled gaps. | Yes | No |
 | `orbit plot` | Write sampled-gap HTML heatmaps. | Yes | No |
 | `orbit path` | Construct and record winding paths. | Yes | No |
+| `orbit machine show` | Show the resolved machine profile and scheduler configuration. | No | No |
+| `orbit doctor` | Print the same diagnostics for quick machine-health checks. | No | No |
 | `orbit path-scf --check-only` | Validate path-image SCF inputs. | No | No |
 | `orbit path-scf` | Prepare path-image QE inputs and scripts. | Yes | No |
 | `orbit path-scf --submit` | Prepare and submit unfinished path SCFs. | Yes | Yes |
 | `orbit path-extract` | Extract calculated path-image gaps. | Yes | No |
 | `orbit plot-path` | Write combined heatmap/path HTML viewers. | Yes | No |
+| `orbit path-response` | Prepare PH and Berry-polarization jobs for a final path or helper iteration. | Yes | No |
+| `orbit path-ph` | Prepare only `ph.x` jobs. | Yes | No |
+| `orbit path-polarization` | Prepare only Berry-polarization jobs. | Yes | No |
+| `orbit path-response-plot` | Analyze and plot polarization/transport results. | Yes | No |
 
 ## Project layout
 

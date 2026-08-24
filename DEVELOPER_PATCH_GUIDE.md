@@ -33,12 +33,21 @@ orbit/
 │   ├── pathfinding.py
 │   ├── path_gaps.py
 │   ├── path_plotting.py
+│   ├── helpers.py
+│   ├── helper_plotting.py
+│   ├── machine_profiles/
+│   │   ├── generic_slurm.toml
+│   │   ├── perlmutter.toml
+│   │   └── whoville3.toml
 │   ├── qe/
 │   │   ├── __init__.py
 │   │   ├── resources.py
 │   │   ├── input.py
 │   │   ├── calculations.py
-│   │   └── path_calculations.py
+│   │   ├── path_calculations.py
+│   │   ├── path_response.py
+│   │   ├── path_response_analysis.py
+│   │   └── path_response_plot.py
 │   ├── records/
 │   │   ├── __init__.py
 │   │   └── pathfinding.py
@@ -53,6 +62,7 @@ orbit/
 | Stage | Command | Primary implementation | Reads | Writes |
 | --- | --- | --- | --- | --- |
 | Initialize | `orbit init` | `project.py`, `cli.py` | Structure path argument | Directories, `orbit.toml` |
+| Machine check | `orbit machine show`, `orbit doctor` | `cli.py`, `config.py` | `orbit.toml`, machine profile data | Console diagnostics only |
 | Inspect | `orbit inspect` | `structure.py` | CIF, configuration | `structure.json`, `sites.csv` |
 | Select | `orbit targets set` | `targets.py`, `config.py` | `sites.csv` | `targets.csv`, `[targets]` config |
 | Sample | `orbit sample` | `sampling.py` | CIF, site/target manifests | `sampling.json`, `samples.csv`, CIFs |
@@ -63,6 +73,8 @@ orbit/
 | Path SCF | `orbit path-scf` | `qe/path_calculations.py`, shared QE/scheduler modules | Selected path run, UPFs, config | Path QE inputs and Slurm scripts |
 | Path extraction | `orbit path-extract` | `path_gaps.py` | Path preparation and QE outputs | Path `gaps.csv`, `extraction.json` |
 | Combined viewer | `orbit plot-path` | `path_plotting.py` | Sample gaps, path gaps, path run, structure | Standalone HTML and JSON manifest |
+| Helper refinement | `orbit helper ...` | `helpers.py`, `helper_plotting.py` | Existing path run, helper scan outputs | Helper campaigns, helper results, plots |
+| Path response | `orbit path-response`, `path-ph`, `path-polarization` | `qe/path_response.py`, `qe/path_response_analysis.py` | Path run, SCF save state, configuration | PH/polarization input sets, scripts, analysis CSV/plots |
 
 ## Python module catalog
 
@@ -78,10 +90,11 @@ orbit/
 
 | Module | Responsibility |
 | --- | --- |
-| `src/orbit/config.py` | Parses and validates `orbit.toml` into frozen configuration dataclasses. Resolves paths relative to the project root. `set_target_site_ids()` updates only `[targets]` while preserving all other text. |
+| `src/orbit/config.py` | Parses and validates `orbit.toml` into frozen configuration dataclasses. Resolves paths relative to the project root, merges built-in machine defaults with project overrides, and accepts both `orbit.toml` and legacy `gapflow.toml` for compatibility. |
 | `src/orbit/project.py` | Defines the stable directory layout, path helpers, starter TOML template, and nondestructive project initialization. Add new top-level output directories to `PROJECT_DIRECTORIES`. |
 | `src/orbit/structure.py` | Reads the structure with ASE, obtains symmetry information, associates CIF labels with physical sites, assigns stable site IDs, writes structure/site manifests, and validates the source CIF hash downstream. |
 | `src/orbit/targets.py` | Implements explicit site, element, and all-inequivalent target selection and writes `targets.csv`. It does not modify TOML directly; `config.py` owns that update. |
+| `src/orbit/machine_profiles/*.toml` | Stores built-in scheduler defaults for `generic_slurm`, `perlmutter`, and `whoville3`. Each profile is configuration data, not Python branching. |
 
 ### Geometry, periodicity, and symmetry
 
@@ -97,8 +110,9 @@ orbit/
 | --- | --- |
 | `src/orbit/gaps.py` | Parses QE output text, requires `JOB DONE` for `COMPLETE`, calculates HOMO-LUMO gaps, preserves incomplete/missing/invalid rows, writes extracted sample tables, and provides shared target-selection helpers. |
 | `src/orbit/plotting.py` | Builds standalone interactive 3D sampled-gap heatmaps, including symmetry images, structure atoms, equilibrium target, shared color ranges, tabbed multi-target HTML, and plot manifests. |
+| `src/orbit/helper_plotting.py` | Renders helper-iteration review plots, convergence views, and iteration-by-iteration gap comparisons for the human review gate. |
 
-### Path construction and records
+### Path construction, helper refinement, and records
 
 | Module | Responsibility |
 | --- | --- |
@@ -107,6 +121,7 @@ orbit/
 | `src/orbit/records/pathfinding.py` | Owns immutable run IDs, candidate rows, transcript logging, `run.json`, `index.csv`, success/failure status transitions, and exception-safe failure recording. |
 | `src/orbit/path_gaps.py` | Joins a constructed path with its prepared image calculations, parses each QE output through the shared gap parser, writes one auditable row per image, and signs the resulting path-gap table. |
 | `src/orbit/path_plotting.py` | Builds the combined reference-style HEATMAP/PATH Plotly figure, sphere meshes and periodic boundary copies, calculated-gap graph, animation frames, paused manual slider, light/dark themes, active-button styling, tabs, and plot manifest. |
+| `src/orbit/helpers.py` | Implements helper-atom scan/analyze/path-scf/extract/plot/status workflows, resolves the active helper campaign, enforces the manual review gate, and maintains helper provenance. |
 
 ### Quantum ESPRESSO support
 
@@ -117,6 +132,8 @@ orbit/
 | `src/orbit/qe/input.py` | Validates exact geometry, assigns species order, and renders one QE SCF input using the resolved cell, coordinates, cutoffs, pseudopotentials, bands, k-points, and electronic settings. |
 | `src/orbit/qe/calculations.py` | Converts sampled CIFs into auditable QE calculation directories, preparation manifests, calculation tables, valid lists, and Slurm scripts. It compares signatures and preserves stale results when overwrite is explicit. |
 | `src/orbit/qe/path_calculations.py` | Resolves the latest or explicit path run, validates its manifest and CIF inventory, prepares isolated QE inputs for every path image, writes restart-aware lists/scripts, and applies the same conflict/stale-output policy as sampled calculations. |
+| `src/orbit/qe/path_response.py` | Prepares PH and Berry-polarization calculations for a selected path or helper iteration: validates the saved-state source, updates namelists, renders per-direction inputs, and writes the response job manifest and scripts. |
+| `src/orbit/qe/path_response_analysis.py` | Parses completed PH and polarization outputs, reconstructs Born tensors and Berry branches, computes the transported charge, and writes the analysis CSV and Plotly plots. |
 
 ### Scheduler support
 
@@ -203,7 +220,7 @@ If a patch changes an artifact's scientific meaning or serialized fields:
 Work from the package root:
 
 ```bash
-cd /global/workdir/jkim068/orbit
+cd /path/to/orbit
 ```
 
 ### 1. Identify the owning layer
@@ -260,7 +277,7 @@ Examples:
 
 ```bash
 # Plot-only patch
-cd /global/workdir/jkim068/H2O
+cd /path/to/project
 orbit plot-path --target O1
 
 # Slurm-template patch
@@ -399,7 +416,7 @@ unzip -t orbit_step8_3.zip
 After unpacking on the cluster:
 
 ```bash
-cd /global/workdir/jkim068/orbit
+cd /path/to/orbit
 python -m pip install -e .
 orbit --version
 python -m unittest discover -s tests -v
