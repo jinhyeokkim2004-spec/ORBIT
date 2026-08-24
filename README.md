@@ -5,7 +5,7 @@ periodic crystal, running Quantum ESPRESSO (QE) SCF calculations, extracting
 HOMO-LUMO gaps, finding a maximum-bottleneck winding path, calculating every
 path image, and viewing the result in an interactive HTML plot.
 
-This README is the user guide. Developers should also read
+This README is the user guide. Users wishing to customize scripts for their personal usage should also read
 [`DEVELOPER_PATCH_GUIDE.md`](DEVELOPER_PATCH_GUIDE.md).
 
 ## What the workflow does
