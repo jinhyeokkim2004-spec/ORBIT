@@ -116,6 +116,20 @@ H = "H.us.pbe.upf"
 O = "O.paw.pbe.upf"
 ```
 
+**Reference pseudopotential set used for testing**
+ORBIT development and many benchmark calculations were tested using the
+SSSP PBE pseudopotential set from the Standard Solid-State
+Pseudopotentials (SSSP) library.
+
+The pseudopotential files are not distributed with ORBIT. Users should
+download the desired SSSP PBE pseudopotentials separately and place them in
+the configured pseudo/library/ directory.
+
+ORBIT is not restricted to SSSP nor PBE pseudopotentials. Other Quantum ESPRESSO
+compatible UPF pseudopotentials may be used by configuring the corresponding
+files and cutoff values in orbit.toml and cutoffs.json.
+
+
 ## 3. Initialize a crystal project
 
 Place the CIF in its project directory, then initialize the stable ORBIT
