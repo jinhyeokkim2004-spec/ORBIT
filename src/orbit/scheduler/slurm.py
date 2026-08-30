@@ -160,7 +160,7 @@ echo "Submitting ${{COUNT}} unfinished {target_id} calculations."
 echo "Maximum simultaneous tasks: {max_concurrent}"
 
 # Whoville rejects very large Slurm arrays.  Split large calculation
-# inventories into safe chunks and chain them with afterok.  Chaining,
+# inventories into safe chunks and chain them with afterany.  Chaining,
 # rather than submitting all chunks independently, preserves the requested
 # global max_concurrent limit.
 MAX_ARRAY_TASKS=900
@@ -213,7 +213,7 @@ else
         else
             JOB_ID=$(
                 sbatch --parsable \
-                    --dependency="afterok:${{PREVIOUS_JOB_ID}}" \
+                    --dependency="afterany:${{PREVIOUS_JOB_ID}}" \
                     --array="0-$((CHUNK_COUNT - 1))%{max_concurrent}" \
                     --output="${{LOG_DIR}}/{slug}_%A_%a.out" \
                     --error="${{LOG_DIR}}/{slug}_%A_%a.err" \
