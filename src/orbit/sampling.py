@@ -59,6 +59,7 @@ class SamplePoint:
 class SamplingPlan:
     target: SiteRecord
     target_index_zero_based: int
+    requested_divisions: tuple[int, int, int]
     divisions: tuple[int, int, int]
     raw_grid_count: int
     full_symmetry_order: int
@@ -124,6 +125,90 @@ def grid_divisions(cell: Any, spacing_angstrom: float) -> Any:
         [value + value % 2 if value > 1 else value for value in divisions],
         dtype=np.int64,
     )
+
+
+def symmetry_compatible_grid_divisions(
+    requested_divisions: Any,
+    operations: SymmetryOperations,
+) -> Any:
+    """Return the smallest no-coarser grid closed under the supplied rotations.
+
+    For fractional-grid divisions n_i, closure under a crystallographic
+    rotation R requires n_j to divide R_ij*n_i for every nonzero R_ij.
+    Only divisions at least as fine as the spacing-derived request are
+    considered. The uniform grid with all divisions equal to the largest
+    requested division guarantees a finite fallback.
+    """
+    import numpy as np
+
+    requested = np.asarray(requested_divisions, dtype=np.int64)
+
+    if requested.shape != (3,) or bool(np.any(requested <= 0)):
+        raise ValueError(
+            "requested grid divisions must be three positive integers"
+        )
+
+    def compatible(candidate: tuple[int, int, int]) -> bool:
+        for rotation in operations.rotations:
+            for i in range(3):
+                for j in range(3):
+                    coefficient = abs(int(rotation[i, j]))
+                    if coefficient == 0:
+                        continue
+                    if (
+                        coefficient * int(candidate[i])
+                    ) % int(candidate[j]) != 0:
+                        return False
+        return True
+
+    requested_tuple = tuple(int(value) for value in requested)
+    if compatible(requested_tuple):
+        return requested.copy()
+
+    common = int(max(requested))
+
+    def axis_candidates(lower: int) -> tuple[int, ...]:
+        if common == 1:
+            return (1,)
+        values: list[int] = []
+        if lower == 1:
+            values.append(1)
+            lower = 2
+        if lower % 2:
+            lower += 1
+        values.extend(range(lower, common + 1, 2))
+        return tuple(values)
+
+    axes = [axis_candidates(int(value)) for value in requested]
+
+    best: tuple[int, int, int] | None = None
+    best_key: tuple[int, int, tuple[int, int, int]] | None = None
+
+    for candidate in itertools.product(*axes):
+        candidate = tuple(int(value) for value in candidate)
+        if not compatible(candidate):
+            continue
+
+        key = (
+            int(np.prod(candidate)),
+            sum(
+                candidate[axis] - int(requested[axis])
+                for axis in range(3)
+            ),
+            candidate,
+        )
+
+        if best_key is None or key < best_key:
+            best = candidate
+            best_key = key
+
+    if best is None:
+        raise RuntimeError(
+            "Could not construct a symmetry-compatible sampling grid from "
+            f"requested divisions {requested.tolist()}"
+        )
+
+    return np.asarray(best, dtype=np.int64)
 
 
 def build_anchor_grid(anchor: Any, divisions: Any) -> Any:
@@ -268,7 +353,10 @@ def build_sampling_plans(
     operations = structure_symmetry_operations(
         cell, equilibrium_frac, numbers, config.symprec_angstrom
     )
-    divisions = grid_divisions(cell, config.sampling_spacing_angstrom)
+    requested_divisions = grid_divisions(
+        cell,
+        config.sampling_spacing_angstrom,
+    )
     plans: list[SamplingPlan] = []
     for site_id in selected:
         target = by_id[site_id]
@@ -276,10 +364,16 @@ def build_sampling_plans(
         if target_index >= len(atoms):
             raise ValueError(f"Stored ASE index is invalid for target {site_id}")
         target_frac = equilibrium_frac[target_index]
-        grid = build_anchor_grid(target_frac, divisions)
         stabilizer = target_site_stabilizer(
             operations, target_frac, cell, config.symprec_angstrom
         )
+        divisions = np.asarray(requested_divisions, dtype=np.int64)
+        if config.fold_by_symmetry:
+            divisions = symmetry_compatible_grid_divisions(
+                requested_divisions,
+                stabilizer,
+            )
+        grid = build_anchor_grid(target_frac, divisions)
         if config.fold_by_symmetry:
             indices, orbit_sizes, point_stabilizers = _fold_grid(
                 grid,
@@ -366,6 +460,9 @@ def build_sampling_plans(
             SamplingPlan(
                 target=target,
                 target_index_zero_based=target_index,
+                requested_divisions=tuple(
+                    int(value) for value in requested_divisions
+                ),
                 divisions=tuple(int(value) for value in divisions),
                 raw_grid_count=len(grid),
                 full_symmetry_order=len(operations),
@@ -524,7 +621,14 @@ def write_sampling_plan(
         "fold_by_symmetry": plan.fold_by_symmetry,
         "geometry_filter": "direct_overlap_veto",
         "overlap_tolerance_angstrom": plan.overlap_tolerance_angstrom,
+        "requested_grid_divisions": plan.requested_divisions,
         "grid_divisions": plan.divisions,
+        "grid_divisions_adjusted_for_symmetry": (
+            plan.divisions != plan.requested_divisions
+        ),
+        "grid_division_policy": (
+            "smallest_no_coarser_site_stabilizer_compatible_even_grid"
+        ),
         "raw_grid_count": plan.raw_grid_count,
         "representative_count": plan.representative_count,
         "valid_geometry_count": plan.valid_count,
